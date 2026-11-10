@@ -1,8 +1,11 @@
-# Stage 1 tests: the core language. Run: python3 test_stage1.py
-# Every line should say PASS.
+# Stage 1 tests: the core language. Run from the repo root: uv run pytest -k stage1
+import re
+from dataclasses import dataclass
+
+import pytest
+
+import direct
 import interp
-from interp import evaluate, eval_k
-from testlib import report, attempt
 
 
 def FACT(n):
@@ -73,16 +76,13 @@ LETREC_LEAK = ("+", ("letrec", "loop_fn", ("fn", [], 1), 0), ("call", "loop_fn")
 LET_NOT_REC = ("let", "x", 1, ("let", "x", ("fn", [], "x"), ("call", "x")))
 
 
+@dataclass
 class Raises:
     """Expected result: evaluating must raise an exception whose message mentions
     `name` (e.g. KeyError('secret') or NameError('unbound variable: secret')).
     Any Python exception type is fine for now; stage 3 adds the language's own errors."""
 
-    def __init__(self, name):
-        self.name = name
-
-    def __repr__(self):
-        return f"<raises, mentioning {self.name!r}>"
+    name: str
 
 
 STAGE1 = [
@@ -128,45 +128,41 @@ STAGE1_K = [case for case in STAGE1 if case[0] not in TOO_DEEP_FOR_K] + [
 ]
 
 
-def run_k(expr, env):
-    """Run eval_k, with interp.evaluate disabled: a CPS evaluator must not hand
-    any part of the program (e.g. a function body) to the direct-style one."""
-
-    def no_direct(*args):
-        raise AssertionError("eval_k called evaluate() (direct style)")
-
-    calls = []
-    real, interp.evaluate = interp.evaluate, no_direct
-    try:
-        eval_k(expr, env, calls.append)
-    finally:
-        interp.evaluate = real
-    return calls
+ENV = {"y": 7}
 
 
-def check(label, run, want):
-    """run() evaluates the case; want is the expected value, or a Raises(...)."""
-    try:
-        got = run()
-    except NotImplementedError:
-        return report(label, False, "(NotImplementedError)")
-    except Exception as e:
-        got = f"!! {type(e).__name__}: {e}"
-        if isinstance(want, Raises):
-            ok = want.name in str(e)
-            return report(label, ok, "" if ok else f"(got {got!r}, want {want!r})")
-    ok = not isinstance(want, Raises) and got == want and type(got) is type(want)
-    report(label, ok, "" if ok else f"(got {got!r}, want {want!r})")
+def check(evaluate, expr, want):
+    if isinstance(want, Raises):
+        with pytest.raises(Exception, match=re.escape(want.name)):
+            evaluate(expr, dict(ENV))
+    else:
+        got = evaluate(expr, dict(ENV))
+        assert got == want and type(got) is type(want)
 
 
-print("--- stage 1, step A: evaluate (direct style) ---")
-for label, expr, want in STAGE1:
-    check(label, lambda: evaluate(expr, {"y": 7}), want)
+def label(case):
+    return case[0]
 
-print("\n--- stage 1, step B: eval_k (CPS) ---")
-for label, expr, want in STAGE1_K:
-    check(
-        label,
-        lambda: run_k(expr, {"y": 7}),
-        want if isinstance(want, Raises) else [want],
-    )
+
+@pytest.mark.parametrize("case", STAGE1, ids=label)
+def test_direct(case):
+    _, expr, want = case
+    check(direct.evaluate, expr, want)
+
+
+@pytest.mark.parametrize("case", STAGE1_K, ids=label)
+def test_cps(case):
+    _, expr, want = case
+    check(interp.run, expr, want)
+
+
+def test_cps_does_not_use_direct():
+    """A CPS evaluator must not hand any part of the program (e.g. a function
+    body) to the direct-style one."""
+    assert not hasattr(interp, "evaluate")
+    borrowed = [
+        name
+        for name, v in vars(interp).items()
+        if v is direct or getattr(v, "__module__", None) == "direct"
+    ]
+    assert borrowed == [], f"interp.py uses direct.py: {borrowed}"

@@ -1,0 +1,13 @@
+[project]
+name = "learn-cps"
+version = "0.1.0"
+description = "Learning continuation-passing style (CPS) hands-on"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["py/interpreter"]
+pythonpath = ["py/interpreter"]

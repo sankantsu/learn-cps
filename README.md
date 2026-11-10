@@ -22,8 +22,12 @@ yourself, replace a solution with `raise NotImplementedError` and make the tests
 | `06_backtracking.py` | Call a continuation many times = backtracking search (n-queens) |
 | `07_callcc.py` | call/cc: escape continuations and re-entering a saved continuation |
 | `ex_recap.py`, `ex_final.py` | Optional recap exercises covering all of the above |
-| `interpreter/` | Project: a CPS interpreter for a tiny language, built in stages (`python3 test_stage1.py`) |
+| `interpreter/` | Project: a CPS interpreter for a tiny language, built in stages ([README](py/interpreter/README.md)) |
 
 ## JavaScript (`js/`): run with `node js/<file>`
 
 Lessons 01–06 in JavaScript (`01-basics.js` … `06-backtracking.js`), same ideas as above.
+
+## Interpreter tests
+
+`uv run pytest` from the repository root (or `pip install pytest && pytest`).
