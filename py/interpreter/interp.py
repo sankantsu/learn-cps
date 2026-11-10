@@ -29,7 +29,7 @@ class Closure:
 
 def eval_list_k(lst, env, k, elst=()):
     if not lst:
-        return k(elst)
+        return lambda: k(elst)
     x, *rest = lst
 
     def eval_rest_k(x):
@@ -44,15 +44,15 @@ def eval_k(expr, env, k):
     assert callable(k)
     # Integer
     if isinstance(expr, int) and not isinstance(expr, bool):
-        return k(expr)
+        return lambda: k(expr)
     # Bool
     if isinstance(expr, bool):
-        return k(expr)
+        return lambda: k(expr)
     # Variable
     if isinstance(expr, str):
         var_name = expr
         assert var_name not in OPS
-        return k(env[var_name])
+        return lambda: k(env[var_name])
     # Compound
     if isinstance(expr, tuple):
         e0 = expr[0]
@@ -65,7 +65,7 @@ def eval_k(expr, env, k):
             return eval_k(
                 expr[1],
                 env,
-                lambda lhs: eval_k(expr[2], env, lambda rhs: k(op(lhs, rhs))),
+                lambda lhs: eval_k(expr[2], env, lambda rhs: lambda: k(op(lhs, rhs))),
             )
 
         assert e0 in KEYWORDS
@@ -102,7 +102,7 @@ def eval_k(expr, env, k):
         if e0 == "fn":
             params = expr[1]
             body = expr[2]
-            return k(
+            return lambda: k(
                 Closure(
                     params,
                     body,
@@ -129,4 +129,7 @@ def eval_k(expr, env, k):
 
 def run(expr, env=None):
     """Evaluate a program and return its value. The stable entry point for tests."""
-    return eval_k(expr, dict(env or {}), lambda v: v)
+    step = eval_k(expr, dict(env or {}), lambda v: v)
+    while callable(step):
+        step = step()
+    return step

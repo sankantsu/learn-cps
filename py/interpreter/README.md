@@ -8,7 +8,7 @@ written *in* the language never need to be rewritten in CPS by hand.
 | Stage | Feature | Tests |
 |-------|---------|-------|
 | 1 | The core language: direct-style evaluator, then CPS evaluator | `test_stage1.py` |
-| 2 | Trampoline: deep recursion in the language, proper tail calls | |
+| 2 | Trampoline: deep recursion in the language, proper tail calls | `test_stage2.py` |
 | 3 | `raise` / `try` | |
 | 4 | Generators (`yield`) | |
 | 5 | `amb` / `require` | |
@@ -45,11 +45,16 @@ There's no parser: a program is a Python value, an AST written as nested tuples.
 Example, factorial:
 
 ```python
-("letrec", "fact", ("fn", ["n"],
-                     ("if", ("<", "n", 1),
-                            1,
-                            ("*", "n", ("call", "fact", ("-", "n", 1))))),
- ("call", "fact", 5))                                     # => 120
+(
+    "letrec",
+    "fact",
+    (
+        "fn",
+        ["n"],
+        ("if", ("<", "n", 1), 1, ("*", "n", ("call", "fact", ("-", "n", 1)))),
+    ),
+    ("call", "fact", 5),
+)  # => 120
 ```
 
 An environment maps names to values. Extend it without mutating it, e.g. `{**env, name: value}`,
@@ -67,3 +72,27 @@ closure remembers the env where its `fn` was evaluated, not the env where it's c
 
 Without a trampoline, every step of the CPS evaluator is a nested Python call,
 so even `fib(8)` overflows Python's stack. The stage 1 CPS tests therefore use small inputs, and stage 2 fixes this.
+
+## Stage 2: trampoline and proper tail calls
+
+Programs in the language should be able to recurse 100,000 levels deep, far past
+Python's limit of 1000. Use the trampoline from lesson 04:
+
+- Make `eval_k` hand back thunks (zero-argument functions) instead of making
+  every next step a nested Python call. Then change `run()` to drive them with a
+  trampoline loop.
+- Where do the thunks go? Lesson 04's rule: every cycle in the call graph must
+  pass through a thunk. Look for every way that control can loop back: one
+  `eval_k` calling another, and also continuations calling continuations
+  (think of returning from 100,000 levels of `sum`).
+- Every call in tail position must `return` its result, or the thunks get lost.
+- The trampoline tells thunks from final values with `callable()`. Can a
+  program's value ever be callable? (One test returns a function from `run()`.)
+
+**Proper tail calls.** In CPS, a call in tail position passes its own `k` on
+unchanged, so a tail-recursive loop in the language doesn't grow the
+continuation. It runs in constant memory, however many times it goes round. Scheme
+requires this, and Python doesn't have it. Your evaluator gets it for free,
+as long as no case wraps `k` in a new continuation that does nothing.
+`test_proper_tail_calls` checks this by measuring memory: the tail-recursive `loop` must stay
+flat, while the non-tail `sum` grows with `n`, as it has to.
